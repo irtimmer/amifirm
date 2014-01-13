@@ -225,7 +225,7 @@ public class AmiFirm {
 	}
 	
 	public static void main(String args[]) {
-		System.out.println("AmiFirm 0.1 Copyright (c) 2013 Iwan Timmer");
+		System.out.println("AmiFirm 0.1.1 Copyright (c) 2013 Iwan Timmer");
 		System.out.println("Distributed under the GNU GPL v3. For full terms see the file LICENSE.");
 		System.out.println();
 
