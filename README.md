@@ -18,7 +18,7 @@ java -jar amifirm.jar -m <multicast_address> <port> [path_to_extract]
 Press a key when you think the download is ready (when there aren't appearing
 new dots) to extract the firmware.
 
-### Network multicast download
+### Locally stored firmware extraction
 Start the application using:
 
 ```
