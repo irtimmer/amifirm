@@ -152,7 +152,7 @@ public class AmiFirm {
 								
 								ByteBuffer buffer = fileBuffer.get(fileId);
 								in.read(buffer.array(), buffer.position(), dataLength - 18);
-								buffer.position(buffer.position() + dataLength);
+								buffer.position(buffer.position() + dataLength - 18);
 								break;
 							default:
 								throw new IOException("Unsupported data header type: "+ dataType);		  		
@@ -439,7 +439,7 @@ public class AmiFirm {
 			}
 		}
 		
-		if (address == null || address == null)
+		if (address == null && file == null)
 			usage = true;
 		
 		if (usage) {
