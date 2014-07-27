@@ -279,7 +279,7 @@ public class AmiFirm {
 	 * @param files name of files to extract (empty to extract all)
 	 * @throws IOException 
 	 */
-	private void extract(File dir, List<String> files) throws FileNotFoundException, IOException {
+	private void extract(File dir, List<String> files, boolean gunzip) throws FileNotFoundException, IOException {
 		System.out.println("Creating directories...");
 		
 		for (String name : directoryNames.values()) {
@@ -293,7 +293,7 @@ public class AmiFirm {
 		
 		for (Short fileId : fileNames.keySet()) {
 			String fileName = fileNames.get(fileId);
-			boolean inflate = fileName.endsWith(".gz");
+			boolean inflate = gunzip && fileName.endsWith(".gz");
 			if (inflate)
 				fileName = fileName.substring(0, fileName.length()-3);
 			
@@ -335,6 +335,7 @@ public class AmiFirm {
 		File dir = null;
 		File save = null;
 		boolean usage = false;
+		boolean inflate = false;
 		List<String> files = new ArrayList<>();
 		
 		for (int i = 0; i < args.length; i++) {
@@ -415,6 +416,12 @@ public class AmiFirm {
 					}
 					files.add(args[i]);
 					break;
+				case "-i":
+					inflate = true;
+					break;
+				default:
+					System.err.println("Unknown flag " + args[i]);
+					usage = true;
 			}
 		}
 		
@@ -439,6 +446,8 @@ public class AmiFirm {
 			System.out.println("\t-f [file]\t\t\tname of local MCastFSv2 file");
 			System.out.println("\t-d [path]\t\t\tpath to extract firmware files to");
 			System.out.println("\t-s [filename]\t\t\tfile to cache firmware packets (multicast only)");
+			System.out.println("\t-e [filename]\t\t\tfiles to extract from firmware");
+			System.out.println("\t-i \t\t\t\tdecompress compressed files");
 			System.exit(-1);
 		}
 
@@ -451,7 +460,7 @@ public class AmiFirm {
 				firm.parseFile(file);
 			
 			if (dir != null)
-				firm.extract(dir, files);
+				firm.extract(dir, files, inflate);
 		} catch (SocketTimeoutException e) {
 			System.err.println("Couldn't receive firmware data");
 		} catch (IOException e) {

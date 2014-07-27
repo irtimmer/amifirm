@@ -16,6 +16,8 @@ java -jar amifirm.jar [options]
 	-f [file]					name of local MCastFSv2 file
 	-d [path]					path to extract firmware files to
 	-s [filename]				file to cache firmware packets (multicast only)
+	-e [filename]				files to extract from firmware
+	-i							decompress compressed files
 ```
 
 ## Known issues
