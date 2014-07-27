@@ -291,13 +291,15 @@ public class AmiFirm {
 		
 		System.out.println("Saving files...");
 		
+		boolean extractAll = files.isEmpty();
 		for (Short fileId : fileNames.keySet()) {
 			String fileName = fileNames.get(fileId);
 			boolean inflate = gunzip && fileName.endsWith(".gz");
 			if (inflate)
 				fileName = fileName.substring(0, fileName.length()-3);
 			
-			if (files.isEmpty() || files.contains(fileName)) {
+			if (extractAll || files.contains(fileName)) {
+				files.remove(fileName);
 				if (fileBuffer.containsKey(fileId)) {
 					System.out.println("Extracting " + fileName);
 					ByteBuffer buffer = fileBuffer.get(fileId);
@@ -314,6 +316,10 @@ public class AmiFirm {
 					System.err.println(fileName + " not found in firmware");
 				}
 			}
+		}
+		
+		for (String fileName:files) {
+			System.err.println(fileName + " not found in firmware");
 		}
 	}
 	
