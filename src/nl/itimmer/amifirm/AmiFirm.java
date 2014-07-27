@@ -33,7 +33,6 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +44,6 @@ import java.util.TreeMap;
  * @author Iwan Timmer
  */
 public class AmiFirm {	
-	private final Map<Short, List<Packet>> filePackets;
 	private final Map<Short, ByteBuffer> fileBuffer;
 	private	final Map<Short, String> fileNames;
 	private final Map<Short, String> directoryNames;
@@ -54,7 +52,6 @@ public class AmiFirm {
 	 * Create a new instance of AmiFirm
 	 */
 	public AmiFirm() {
-		this.filePackets = new TreeMap<>();
 		this.fileBuffer = new TreeMap<>();
 		this.fileNames = new TreeMap<>();
 		this.directoryNames = new TreeMap<>();
@@ -181,10 +178,13 @@ public class AmiFirm {
 			socket.setSoTimeout(5000);
 			socket.joinGroup(address);
 			
+			Map<Short, Short> filePackets = new TreeMap<>();
+			Map<Short, Short> completeFilePackets = new TreeMap<>();
+			
 			Set<String> keys = new HashSet<>();
 			boolean running = true;
-			byte[] buffer = new byte[1500];
-			DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+			byte[] data = new byte[1500];
+			DatagramPacket packet = new DatagramPacket(data, data.length);
 			
 			FileOutputStream out = null;
 			if (export!=null)
@@ -193,47 +193,58 @@ public class AmiFirm {
 			int n = 0;
 			long last = 0;
 			while (running) {
-				String key = new String(buffer, 0, 10);
+				String key = new String(data, 0, 10);
 				socket.receive(packet);
 				if (!keys.contains(key)) {
 					if (out!=null) {
 						ByteBuffer size = ByteBuffer.allocate(4).putInt(packet.getLength());
 						out.write(size.array(), 0, 4);
-						out.write(buffer, 0, packet.getLength());
+						out.write(data, 0, packet.getLength());
 					}
 					
-					ByteBuffer byteBuffer = ByteBuffer.wrap(buffer, 0, packet.getLength());
-					Packet firmwarePacket = null;
-					short id = 0;
-					switch (buffer[0]) {
+					ByteBuffer buffer = ByteBuffer.wrap(data, 0, packet.getLength());
+					switch (data[0]) {
 						case FilePacket.TYPE:
-							firmwarePacket = new FilePacket(byteBuffer);
-							id = ((FilePacket) firmwarePacket).getFileId();
+							FilePacket filePacket = new FilePacket(buffer);
+							short id = filePacket.getFileId();
+							
+							ByteBuffer fileData = fileBuffer.get(id);
+							if(fileData == null) {
+								fileData = ByteBuffer.allocate(filePacket.getSize());
+								filePackets.put(id, filePacket.getTotalPackets());
+								fileBuffer.put(id, fileData);
+								completeFilePackets.put(id, (short) 0);
+							} else
+								completeFilePackets.put(id, (short) (1 + completeFilePackets.get(id)));
+							
+							fileData.position(filePacket.getOffset());
+							fileData.put(buffer.array(), Packet.HEADER_SIZE, buffer.limit());
+							
 							break;
 						case HeaderPacket.TYPE:
-							firmwarePacket = new HeaderPacket(byteBuffer);
+							HeaderPacket headerPacket = new HeaderPacket(buffer);
+							buffer.position(Packet.HEADER_SIZE + (headerPacket.getPacketId()==0?20:-2));
+							while (buffer.remaining()>0) {
+								short fileId = buffer.getShort();                 // fileid  0000
+								buffer.position(buffer.position()+6);             // Skip    0001 0000 81A4
+								buffer.getInt();                            // Read unknown  0000 0000
+								buffer.getInt();                            // Read filesize 0000 1CA7
+								buffer.position(buffer.position()+4);             // Skip    12CE 97F0
+								short fileNameLength = buffer.getShort(); // Filename length 0000
+								String name = new String(buffer.array(), buffer.position(), fileNameLength);
+								if (name.charAt(fileNameLength-1)==0)
+									name = name.substring(0, fileNameLength-1);
+
+								buffer.position(buffer.position()+fileNameLength);
+								fileNames.put(fileId, name);
+							}						
 							break;
 						default:
 							throw new IOException("Not supported firmware");
 					}
 					keys.add(key);
 					
-					if (!filePackets.containsKey(id)) {
-						System.out.print('+');
-						filePackets.put(id, new ArrayList<Packet>());
-					}
-
-					filePackets.get(id).add(firmwarePacket);
-					
-					if (firmwarePacket instanceof HeaderPacket && fileNames.isEmpty()) {
-						if (firmwarePacket.getTotalPackets() == filePackets.get((short) 0).size()) {
-							System.out.println();
-							parseHeaders();
-							System.out.print("Reading firmware...");
-						}
-					}
-					
-					buffer = new byte[buffer.length];
+					data = new byte[data.length];
 					if ((n++)%50 == 0 || last+1000<System.currentTimeMillis()) {
 						System.out.print('.');
 						last = System.currentTimeMillis();
@@ -242,53 +253,21 @@ public class AmiFirm {
 					if (filePackets.size() == (fileNames.size()+1)) {
 						running = false;
 						for (Short fileId:filePackets.keySet()) {
-							List<Packet> packets = filePackets.get(fileId);
-							if (packets.get(0).getTotalPackets() != packets.size()) {
+							if (!filePackets.get(fileId).equals(completeFilePackets.get(fileId))) {
 								running = true;
 								break;
 							}
 						}
 					}
 				}
-				packet.setData(buffer);
+				packet.setData(data);
 				
 				if (System.in.available()>0)
 					running = false;
 			}
 		}
 		System.out.println();
-		filePackets.remove((short) 0);
 	}
-	
-	/**
-	 * Parse the headers from an active multicast download stream
-	 * @see download()
-	 * @throws IOException 
-	 */
-	private void parseHeaders() {
-		System.out.println("Parse headers...");
-		List<Packet> packets = filePackets.get((short) 0);
-		Collections.sort(packets);
-		for (Packet packet:packets) {
-			ByteBuffer buffer = packet.getData();
-			buffer.position(Packet.HEADER_SIZE + (packet.getPacketId()==0?20:-2));
-			while (buffer.remaining()>0) {
-				short fileId = buffer.getShort();                 // fileid  0000
-				buffer.position(buffer.position()+6);             // Skip    0001 0000 81A4
-				buffer.getInt();                            // Read unknown  0000 0000
-				buffer.getInt();                            // Read filesize 0000 1CA7
-				buffer.position(buffer.position()+4);             // Skip    12CE 97F0
-				short fileNameLength = buffer.getShort(); // Filename length 0000
-				String name = new String(buffer.array(), buffer.position(), fileNameLength);
-				if (name.charAt(fileNameLength-1)==0)
-					name = name.substring(0, fileNameLength-1);
-				
-				buffer.position(buffer.position()+fileNameLength);
-				fileNames.put(fileId, name);
-			}
-		}
-	}
-	
 	
 	/**
 	 * Extract firmware
@@ -306,29 +285,12 @@ public class AmiFirm {
 				d.mkdirs();
 		}
 		
-		// for each file found
-		for (Short fileId : fileNames.keySet()) {
-			String fileName = fileNames.get(fileId);
-			
-		}	
-		
-		System.out.println("Saving files from packets...");
+		System.out.println("Saving files...");
 		
 		for (Short fileId : fileNames.keySet()) {
 			String fileName = fileNames.get(fileId);
 			if (files.isEmpty() || files.contains(fileName)) {
-				if (filePackets.containsKey(fileId) && filePackets.get(fileId).size() == filePackets.get(fileId).get(0).getTotalPackets()) {
-					System.out.println("Extracting " + fileName);
-					List<Packet> selectedFilePacket = filePackets.get(fileId);
-					Collections.sort(selectedFilePacket);
-
-					try (FileOutputStream out = new FileOutputStream(new File(dir, fileNames.get(fileId)))) {
-						for (Packet packet:selectedFilePacket) {
-							ByteBuffer buffer = packet.getData();
-							out.write(buffer.array(), Packet.HEADER_SIZE, buffer.limit()-Packet.HEADER_SIZE);
-						}
-					}
-				} if (fileBuffer.containsKey(fileId)) {
+				if (fileBuffer.containsKey(fileId)) {
 					System.out.println("Extracting " + fileName);
 					ByteBuffer buffer = fileBuffer.get(fileId);
 					buffer.rewind();
@@ -338,10 +300,7 @@ public class AmiFirm {
 						out.write(buffer.array(), 0, buffer.remaining());
 					}
 				} else {
-					if (filePackets.containsKey(fileId))
-						System.err.println(fileName + " not found");
-					else
-						System.err.println(fileName + " incomplete");
+					System.err.println(fileName + " not found in firmware");
 				}
 			}
 		}
