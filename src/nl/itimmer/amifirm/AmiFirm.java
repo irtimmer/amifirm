@@ -20,12 +20,15 @@
 
 package nl.itimmer.amifirm;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Application to download and extract Amino Aminet firmware (MCastFSv2)
@@ -289,20 +293,36 @@ public class AmiFirm {
 		
 		for (Short fileId : fileNames.keySet()) {
 			String fileName = fileNames.get(fileId);
+			boolean inflate = fileName.endsWith(".gz");
+			if (inflate)
+				fileName = fileName.substring(0, fileName.length()-3);
+			
 			if (files.isEmpty() || files.contains(fileName)) {
 				if (fileBuffer.containsKey(fileId)) {
 					System.out.println("Extracting " + fileName);
 					ByteBuffer buffer = fileBuffer.get(fileId);
 					buffer.rewind();
-
+					
 					// open the output (append is false), write and close
 					try (FileOutputStream out = new FileOutputStream(new File(dir, fileName))) {
-						out.write(buffer.array(), 0, buffer.remaining());
+						if (inflate)
+							writeInflate(out, buffer.array(), 0, buffer.remaining());
+						else
+							out.write(buffer.array(), 0, buffer.remaining());
 					}
 				} else {
 					System.err.println(fileName + " not found in firmware");
 				}
 			}
+		}
+	}
+	
+	private void writeInflate(OutputStream out, byte[] data, int offset, int length) throws IOException {
+		InputStream in = new GZIPInputStream(new ByteArrayInputStream(data, offset, length));
+		byte[] buffer = new byte[4096];
+		int len;
+		while ((len = in.read(buffer)) != -1) {
+			out.write(buffer, 0, len);
 		}
 	}
 	
