@@ -24,7 +24,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
@@ -41,7 +41,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Application to download and extract Amino / Aminet firmware (MCastFSv2)
+ * Application to download and extract Amino Aminet firmware (MCastFSv2)
  * @author Iwan Timmer
  */
 public class AmiFirm {	
@@ -65,179 +65,106 @@ public class AmiFirm {
 	 * @throws IOException 
 	 */
 	private void parseFile(File file) throws IOException, SocketTimeoutException {
-		System.out.println("Parsing firmware.");
+		System.out.println("Parsing firmware...");
 
-		// determine the filesize
-		long size = file.length();
-		ByteBuffer buffer;
-		
-		// keep the user informed
-		System.out.println(String.format("File '%s' size: %d bytes", file.getName(), size));
-		
 		// try to read the file from 0..length with no overhead
-		try (FileInputStream in = new FileInputStream(file)) {			
-			ByteArrayOutputStream ba = new ByteArrayOutputStream();
-			byte[] b = new byte[4096]; 
-			while( size > 0 ) {
-				in.read(b);
-				ba.write(b);
-				size -= 4096;
-				if(size < 0)
-					size = 0;
-				else if(size < 4096)					
-					b = new byte[(int)size];
-				else
-					b = new byte[4096];
-			}
-				
-			// wrap the ba information into a buffer
-			buffer = ByteBuffer.wrap(ba.toByteArray());
-			
-			// stop buffers
-			ba.close();			
-			in.close();
-		}
-		
-		// Skip the header
-		// Example header
-		// 1 2  3 4  5 6  7 8  9 10 1112 1314 1516 1718 1920 2122 2324 2526 2728 2930 3132 3334
-		// 0E00 4D43 6173 7446 5332 0000 4519 0400 051E 0110 0035 0000 0005 0025 009E 0000 0000 
-		buffer.position(buffer.position()+28);
-		buffer.getShort(); // number of file headers
-		buffer.position(buffer.position()+4);
-		
-		// retrieve all information
-		while(buffer.remaining() > 0) {
-			short type = buffer.get();
-			short fileId;
-			byte fileType;
-			short parentId;
-			int fileSize;
-			
-			switch(type) {
-				// file type
-				case 0x00:
-					// Examples
-					// 1 2  3 4  5 6  7 8  9 10 1112 1314 1516 1718 1920 2122 2324 2526 2728 2930 3132 3334
-					// 0000 0000 0000 41FF 0000 0000 0000 1000 12CE 97F0 0000
-					// 000F 0000 0000 81A4 0000 0000 0000 8A37 12CE 97F0 000E 436F 7572 4249 2E74 7466 2E67 7A00
-					// 002A 0000 0000 41ED 0000 0000 0000 1000 4FE8 2F18 0004 6269 6E00 											====bin
-					// 002B 002A 0000 81ED 0000 0000 0000 65A9 4FE8 2F18 0016 6368 6563 6B5F 7375 7070 6F72 7465 645F 6877 2E73 6800 	check_supported_hw.sh
-					// 0046 0000 0000 41FD 0000 0000 0000 1000 4FE8 2F21 0004 6574 6300 											====etc
-					// 0047 0046 0000 81B4 0000 0000 0000 1B28 4FE8 2F22 0010 6C69 7374 6669 6C65 2E73 6967 6E65 6400 					listfile.signed
+		try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
+			// Skip the header
+			in.skip(28);
+			in.skip(2); // number of file headers
+			in.skip(4);
 
-					// read the file information
-					buffer.position(buffer.position()-1); // easiest way to make a short, lazy I know. But needed if we get fileId's >0xFF
-					fileId = buffer.getShort();                        // fileid 0025					
-					parentId = buffer.getShort();                    // parentid 004A
-					buffer.getShort();                                   // Skip 0000
-					fileType = buffer.get();                         // fileType 81
-					buffer.get();                                        // Skip A4
-					buffer.getShort();                                   // Skip 0000
-					buffer.getInt();                                     // Skip 0000 000D // size?
-					buffer.getShort();                                   // Skip F5CA // checksum?
-					buffer.getInt();                                     // Skip 12CE 97F0
-					short fileNameLength = buffer.getShort();  // fileNameLength 000E
-					
-					// Stop if we don't have a filename to read
-					if(fileNameLength <= 0)						
-						break;
-					
-					// Read the name, move the read poition
-					String name = new String(buffer.array(), buffer.position(), fileNameLength);
-					buffer.position(buffer.position()+fileNameLength);
-									
-					// Stop if we already have saved this entry
-					if (directoryNames.containsKey(fileId) || fileNames.containsKey(fileId))
-						break;
-											
-					// Remove the trailing 0x00 of a filename
-					if (name.charAt(fileNameLength-1)==0)
-						name = name.substring(0, fileNameLength-1);
-				
-					// When we have a parentId we want to include this name
-					if(parentId > 0 && directoryNames.containsKey(parentId))
-						name = String.format("%s/%s", directoryNames.get(parentId), name);					
+			while (in.available() > 0) {
+				int type = in.read();
+				short fileId;
+				int fileType;
+				short parentId;
+				int fileSize;
 
-					switch(String.format("0x%02X",  fileType)) {
-						case "0x41":															
-							// System.out.println(String.format("dirId: 0x%02X, fileType: 0x%04X, parentId: 0x%02X", fileId, fileType, parentId) +": '"+ name + "'");
-							directoryNames.put(fileId, name);
+				switch(type) {
+					case 0x00:
+						// read the file information
+						fileId = (short) in.read();				// fileid 25					
+						parentId = in.readShort();				// parentid 004A
+						in.skip(2);								// Skip 0000
+						fileType = in.read();					// fileType 81
+						in.skip(1);								// Skip A4
+						in.skip(2);								// Skip 0000
+						in.skip(4);								// Skip 0000 000D // size?
+						in.skip(2);								// Skip F5CA // checksum?
+						in.skip(4);								// Skip 12CE 97F0
+						short fileNameLength = in.readShort();	// fileNameLength 000E
+
+						// Stop if we don't have a filename to read
+						if(fileNameLength <= 0)						
 							break;
-						case "0x81":
-							// System.out.println(String.format("fileId: 0x%02X, fileType: 0x%04X, parentId: 0x%02X", fileId, fileType, parentId) +": '"+ name + "'");
-							fileNames.put(fileId, name);
-							break;	
-					}
-					
-					// Done with this file (0x00)
-				  	break;
-				  	
-			  	case 0x04:
-			  		// file contents (sometimes) 19 
-			  		// 0400 051E 0110 0035 0001 0005 0026 009E 0000 0000
-			  		// 0400 0536 0312 0035 0000 0006 0001 0000 1CA7 0000
-			  		buffer.get();                          // skip   00
-			  		short dataLength = buffer.getShort();  // length 0536
-			  		short dataType = buffer.getShort();    // type   0312
-			  		
-			  		switch(String.format("0x%04X",  dataType)) {
-			  		  	case "0x0110":
-			  		  		// Unknown, no idea what this is ... so we skip
-			  		  		// 0400 051E 0110 0035 0001 0005 0026 009E 0000 0000
-			  		  		// 0400 0504 0110 0035 0002 0005 0024 009E 0000 0000
-			  		  		// 0400 050C 0110 0035 0003 0005 0024 009E 0000 0000
-			  		  		buffer.position(buffer.position() + 14);
-			  		  		break;
-			  		  	case "0x0312":
-			  		  		// File data! split into multiple parts, normally parts are presented in sequence
-			  		  		//160C  +53a // 0400 0536 0312 0035 0000 0006 0001 0000 1CA7 0000 0000 1F8B
-			  		  		//1B46  +53a // 0400 0536 0312 0035 0001 0006 0001 0000 1CA7 0000 0524 522E
-			  		  		//              type size data ?    part ?    id   filesize  offset    data ->
-			  		  		buffer.getShort();                  // Skip     0035
-			  		  		short part = buffer.getShort();     // Part     0001
-			  		  	    buffer.getShort();                  // Skip     0006
-			  		  	    fileId = buffer.getShort();         // fileId   0001
-			  		  	    fileSize = buffer.getInt();         // fileSize 0000 1CA7
-			  		  	    buffer.getInt();                    // offset   0000 0524
-			  		  	    
-		  		  	    	if(!fileBuffer.containsKey(fileId)) {
-		  		  	    		ByteBuffer bb = ByteBuffer.allocate(fileSize);
-		  		  	    		fileBuffer.put(fileId, bb);
-		  		  	    	}
 
-		  		  	    	// System.out.println("fileId: "+ String.format("0x%02X", fileId) +", part: "+  part +", fileSize: "+ fileSize +", dataLength: "+ (dataLength-16));
-		  		  	    	for(int n=0; n<(dataLength-18); n++) {
-		  		  	    		if(buffer.remaining() > 0)
-		  		  	    			fileBuffer.get(fileId).put(buffer.get());
-		  		  	    	}
-				  			break;
+						// Read the name, move the read poition
+						byte[] nameBuffer = new byte[fileNameLength];
+						in.read(nameBuffer);
+						String name = new String(nameBuffer);
 
-					  	default:
-					  		throw new IOException("Unsupported data header type: "+ dataType);		  		
-			  		}
-			  		break;
-			  		
-			  	default:
-			  		// unknown data, maybe we misunderstood the information and did not parse it correctly
-			  		System.out.println("Unknown header, printing 16 bytes before and 16 bytes after unknown header ID");
-			  		buffer.position(buffer.position()-16);
-			  		for(int n=0; n<16; n+=2)
-			  			System.out.print(String.format("%02X %02X ", buffer.get(), buffer.get()));
-			  		System.out.println("*");
-			  		for(int n=0; n<16; n+=2)
-			  			System.out.print(String.format("%02X %02X ", buffer.get(), buffer.get()));
-			  		buffer.position(buffer.position()-16);
-			  		System.out.println();
-			  				  		
-			  		// Show some handy information to locate it in a Hex editor
-			  		System.out.println(String.format("Position 0x%08X, Remaining: 0x%08X", buffer.position(), buffer.remaining()));
-			  		throw new IOException("Unsupported header type: "+ type);			  		
+						// Stop if we already have saved this entry
+						if (directoryNames.containsKey(fileId) || fileNames.containsKey(fileId))
+							break;
+
+						// Remove the trailing 0x00 of a filename
+						if (name.charAt(fileNameLength-1)==0)
+							name = name.substring(0, fileNameLength-1);
+
+						// When we have a parentId we want to include this name
+						if(parentId > 0 && directoryNames.containsKey(parentId))
+							name = String.format("%s/%s", directoryNames.get(parentId), name);					
+
+						switch(fileType) {
+							case 0x41:															
+								directoryNames.put(fileId, name);
+								break;
+							case 0x81:
+								fileNames.put(fileId, name);
+								break;	
+						}
+						break;
+					case 0x04:
+						// file contents (sometimes) 19 
+						in.skip(1);								// Skip 00
+						short dataLength = in.readShort();		// length 0536
+						short dataType = in.readShort();		// type 0312
+
+						switch(dataType) {
+							case 0x0110:
+								// Unknown, no idea what this is ... so we skip
+								in.skip(14);
+								break;
+							case 0x0312:
+								// File data! split into multiple parts, normally parts are presented in sequence
+								in.skip(2);							// Skip 0035
+								in.skip(2);							// Part 0001
+								in.skip(2);							// Skip 0006
+								fileId = in.readShort();			// fileId 0001
+								fileSize = in.readInt();			// fileSize 0000 1CA7
+								in.skip(4);							// offset 0000 0524
+
+								if(!fileBuffer.containsKey(fileId)) {
+									ByteBuffer bb = ByteBuffer.allocate(fileSize);
+									fileBuffer.put(fileId, bb);
+								}
+								
+								ByteBuffer buffer = fileBuffer.get(fileId);
+								in.read(buffer.array(), buffer.position(), dataLength - 18);
+								buffer.position(buffer.position() + dataLength);
+								break;
+							default:
+								throw new IOException("Unsupported data header type: "+ dataType);		  		
+						}
+						break;
+
+					default:
+						// unknown data, maybe we misunderstood the information and did not parse it correctly
+						System.out.println("Unknown header of type: " + type);
+				}
 			}
 		}
-
-		// first version did this too
-		System.out.println();
 	}
 	
 	/**
@@ -418,10 +345,7 @@ public class AmiFirm {
 	}
 	
 	public static void main(String args[]) {
-		System.out.println("AmiFirm 0.2.0");
-		System.out.println("Copyright (c) 2013-2014 Iwan Timmer");
-		System.out.println("Copyright (c) 2014 mielleman");
-		System.out.println("Distributed under the GNU GPL v3. For full terms see the LICENSE file.\n");
+		System.out.println("AmiFirm 0.2.0 - Amino Aminet Firmware downloader and extractor");
 
 		int port = 0;
 		InetAddress address = null;
