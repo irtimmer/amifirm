@@ -31,5 +31,6 @@ java -jar amifirm.jar -f <path to firmware> <path to extract firmware to>
 
 ## Copyright and license
 
-Copyright 2013, 2014 Iwan Timmer under [the GPLv3 license](LICENSE).
-
+Copyright 2013, 2014 Iwan Timmer
+Copyright 2014 mielleman
+Distributed under the GNU GPL v3. For full terms see the LICENSE file
