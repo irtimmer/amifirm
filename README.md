@@ -8,21 +8,14 @@ investigate the firmware contents.
 
 ## Usage
 
-### Network multicast download
 Start the application using:
 
 ```
-java -jar amifirm.jar -m <multicast_address> <port> [path_to_extract]
-```
-
-Press a key when you think the download is ready (when there aren't appearing
-new dots) to extract the firmware.
-
-### Locally stored firmware extraction
-Start the application using:
-
-```
-java -jar amifirm.jar -f <path to firmware> <path to extract firmware to>
+java -jar amifirm.jar [options]
+	-m [multicast address:port]	address to download firmware from
+	-f [file]					name of local MCastFSv2 file
+	-d [path]					path to extract firmware files to
+	-s [filename]				file to cache firmware packets (multicast only)
 ```
 
 ## Known issues

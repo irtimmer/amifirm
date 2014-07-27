@@ -439,12 +439,15 @@ public class AmiFirm {
 			}
 		}
 		
+		if (address == null || address == null)
+			usage = true;
+		
 		if (usage) {
 			System.out.println("Usage: java -jar amifirm.jar [options]");
-			System.out.println("\t-m [multicast address:port]\t\taddress to download firmware from");
-			System.out.println("\t-f [file]\t\tname of local MCastFSv2 file");
-			System.out.println("\t-d [path]\t\tpath to extract firmware files to");
-			System.out.println("\t-s [filename]\t\tfile to cache firmware packets (multicast only)");
+			System.out.println("\t-m [multicast address:port]\taddress to download firmware from");
+			System.out.println("\t-f [file]\t\t\tname of local MCastFSv2 file");
+			System.out.println("\t-d [path]\t\t\tpath to extract firmware files to");
+			System.out.println("\t-s [filename]\t\t\tfile to cache firmware packets (multicast only)");
 			System.exit(-1);
 		}
 
