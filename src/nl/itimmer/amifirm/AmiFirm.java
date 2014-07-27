@@ -293,9 +293,10 @@ public class AmiFirm {
 	/**
 	 * Extract firmware
 	 * @param dir Directory to extract files to
+	 * @param files name of files to extract (empty to extract all)
 	 * @throws IOException 
 	 */
-	private void extract(File dir) throws FileNotFoundException, IOException {
+	private void extract(File dir, List<String> files) throws FileNotFoundException, IOException {
 		System.out.println("Creating directories...");
 		
 		for (String name : directoryNames.values()) {
@@ -315,31 +316,33 @@ public class AmiFirm {
 		
 		for (Short fileId : fileNames.keySet()) {
 			String fileName = fileNames.get(fileId);
-			if (filePackets.containsKey(fileId) && filePackets.get(fileId).size() == filePackets.get(fileId).get(0).getTotalPackets()) {
-				System.out.println("Extracting " + fileName);
-				List<Packet> selectedFilePacket = filePackets.get(fileId);
-				Collections.sort(selectedFilePacket);
+			if (files.isEmpty() || files.contains(fileName)) {
+				if (filePackets.containsKey(fileId) && filePackets.get(fileId).size() == filePackets.get(fileId).get(0).getTotalPackets()) {
+					System.out.println("Extracting " + fileName);
+					List<Packet> selectedFilePacket = filePackets.get(fileId);
+					Collections.sort(selectedFilePacket);
 
-				try (FileOutputStream out = new FileOutputStream(new File(dir, fileNames.get(fileId)))) {
-					for (Packet packet:selectedFilePacket) {
-						ByteBuffer buffer = packet.getData();
-						out.write(buffer.array(), Packet.HEADER_SIZE, buffer.limit()-Packet.HEADER_SIZE);
+					try (FileOutputStream out = new FileOutputStream(new File(dir, fileNames.get(fileId)))) {
+						for (Packet packet:selectedFilePacket) {
+							ByteBuffer buffer = packet.getData();
+							out.write(buffer.array(), Packet.HEADER_SIZE, buffer.limit()-Packet.HEADER_SIZE);
+						}
 					}
+				} if (fileBuffer.containsKey(fileId)) {
+					System.out.println("Extracting " + fileName);
+					ByteBuffer buffer = fileBuffer.get(fileId);
+					buffer.rewind();
+
+					// open the output (append is false), write and close
+					try (FileOutputStream out = new FileOutputStream(new File(dir, fileName))) {
+						out.write(buffer.array(), 0, buffer.remaining());
+					}
+				} else {
+					if (filePackets.containsKey(fileId))
+						System.err.println(fileName + " not found");
+					else
+						System.err.println(fileName + " incomplete");
 				}
-			} if (fileBuffer.containsKey(fileId)) {
-				System.out.println("Extracting " + fileName);
-				ByteBuffer buffer = fileBuffer.get(fileId);
-				buffer.rewind();
-				
-				// open the output (append is false), write and close
-				try (FileOutputStream out = new FileOutputStream(new File(dir, fileName))) {
-					out.write(buffer.array(), 0, buffer.remaining());
-				}
-			} else {
-				if (filePackets.containsKey(fileId))
-					System.err.println(fileName + " not found");
-				else
-					System.err.println(fileName + " incomplete");
 			}
 		}
 	}
@@ -353,6 +356,7 @@ public class AmiFirm {
 		File dir = null;
 		File save = null;
 		boolean usage = false;
+		List<String> files = new ArrayList<>();
 		
 		for (int i = 0; i < args.length; i++) {
 			switch (args[i]) {
@@ -424,6 +428,14 @@ public class AmiFirm {
 						usage = true;
 					}
 					break;
+				case "-e":
+					i++;
+					if (i == args.length) {
+						System.err.println("File name is missing");
+						usage = true;
+					}
+					files.add(args[i]);
+					break;
 			}
 		}
 		
@@ -460,7 +472,7 @@ public class AmiFirm {
 				firm.parseFile(file);
 			
 			if (dir != null)
-				firm.extract(dir);
+				firm.extract(dir, files);
 		} catch (SocketTimeoutException e) {
 			System.err.println("Couldn't receive firmware data");
 		} catch (IOException e) {
