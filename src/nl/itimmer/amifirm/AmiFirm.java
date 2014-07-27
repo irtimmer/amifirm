@@ -1,5 +1,6 @@
 /**
  * Copyright (C) 2013, 2014 Iwan Timmer
+ * Copyright (C) 2014 mielemann
  *
  * This file is part of AmiFirm.
  *
@@ -31,7 +32,6 @@ import java.net.MulticastSocket;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -45,88 +45,37 @@ import java.util.TreeMap;
  * @author Iwan Timmer
  */
 public class AmiFirm {	
-	private final InetAddress address;
-	private final int port;
-	private final File dir;
-	private final File export;
-	
 	private final Map<Short, List<Packet>> filePackets;
 	private final Map<Short, ByteBuffer> fileBuffer;
 	private	final Map<Short, String> fileNames;
 	private final Map<Short, String> directoryNames;
 	
 	/**
-	 * Create a new download and extract session
-	 * @param address multicast address on which firmware is broadcasted
-	 * @param port portnumber of the udp packets containing firmware
-	 * @param dir directory to extract firmware to
-	 * @param export file to export firmware to or null
+	 * Create a new instance of AmiFirm
 	 */
-	public AmiFirm(InetAddress address, int port, File dir, File export) {
-		this.address = address;
-		this.port = port;
-		this.dir = dir;
-		this.export = export;
-		
+	public AmiFirm() {
 		this.filePackets = new TreeMap<>();
 		this.fileBuffer = new TreeMap<>();
 		this.fileNames = new TreeMap<>();
 		this.directoryNames = new TreeMap<>();
 	}
-	
-	/**
-	 * Create a new local extract session
-	 * @param dir directory to extract firmware to
-	 * @param export file to export firmware to or null
-	 */
-	public AmiFirm(File dir, File export) {
-		this.address = null;
-		this.port = 0;
-		this.dir = dir;
-		this.export = export;
-		
-		this.filePackets = new TreeMap<>();
-		this.fileBuffer = new TreeMap<>();
-		this.fileNames = new TreeMap<>();
-		this.directoryNames = new TreeMap<>();
-	}
-	
-	/**
-	 * Download and extract firmware
-	 * @throws IOException 
-	 */
-	public void run() throws IOException {
-		download();
-		savePackets();
-	}
-	
-	/**
-	 * Read and extract firmware
-	 * @throws IOException 
-	 */
-	public void read() throws IOException {
-		parse();
-		saveBuffers();
-	}
-	
+        
 	/**
 	 * Parse local firmware file
 	 * @throws IOException 
 	 */
-	private void parse() throws IOException, SocketTimeoutException {
+	private void parseFile(File file) throws IOException, SocketTimeoutException {
 		System.out.println("Parsing firmware.");
-		
-		// we misuse the export variable for our firmware information
-		
+
 		// determine the filesize
-		long size = this.export.length() - 1;	
+		long size = file.length();
 		ByteBuffer buffer;
 		
 		// keep the user informed
-		System.out.println(String.format("File '%s' size: %d bytes", this.export.getName(), size));
+		System.out.println(String.format("File '%s' size: %d bytes", file.getName(), size));
 		
 		// try to read the file from 0..length with no overhead
-		try (FileInputStream in = new FileInputStream(this.export)) {			
+		try (FileInputStream in = new FileInputStream(file)) {			
 			ByteArrayOutputStream ba = new ByteArrayOutputStream();
 			byte[] b = new byte[4096]; 
 			while( size > 0 ) {
@@ -290,56 +239,15 @@ public class AmiFirm {
 		// first version did this too
 		System.out.println();
 	}
-
-	/**
-	 * Extract firmware from filled buffers
-	 * @see download()
-	 * @throws IOException 
-	 */
-	private void saveBuffers() throws FileNotFoundException, IOException {
-		System.out.println("Creating directories.");
-		
-		// foreach directory found
-		for (Short dirId : directoryNames.keySet()) {
-			String dirName = directoryNames.get(dirId);
-			File d = new File(dir, dirName);
-			
-			// create the directory if it doesn't exist
-			if(!d.exists()) {
-				System.out.println("Creating " + dirName);
-				d.mkdirs();
-			}
-		}
-		
-		System.out.println("Saving files from buffers.");
-
-		// for each file found
-		for (Short fileId : fileNames.keySet()) {
-			String fileName = fileNames.get(fileId);
-			if (fileBuffer.containsKey(fileId)) {
-				System.out.println("Extracting " + fileName);
-				ByteBuffer fb = fileBuffer.get(fileId);
-				fb.rewind();
-				
-				// open the output (append is false), write and close
-				File f = new File(dir, fileName);
-				FileOutputStream stream = new FileOutputStream(f, false);
-				FileChannel channel = stream.getChannel();
-				channel.write(fb);
-				channel.close();
-				stream.close();
-				
-			} else {
-				System.err.println("Warning: "+ fileName + " not found in data buffers");
-			}
-		}	
-	}
 	
 	/**
 	 * Download firmware through a multicast subscription
+	 * @param address multicast address to download from
+	 * @param port portnumber to download from
+	 * @param export file to read and save downloaded packets to and from (can be null)
 	 * @throws IOException 
 	 */
-	private void download() throws IOException, SocketTimeoutException {
+	private void download(InetAddress address, int port, File export) throws IOException, SocketTimeoutException {
 		System.out.println("Press key to stop downloading");
 		System.out.print("Downloading firmware...");
 		try (MulticastSocket socket = new MulticastSocket(port)) {
@@ -456,11 +364,26 @@ public class AmiFirm {
 	
 	
 	/**
-	 * Extract firmware from downloaded packets
-	 * @see download()
+	 * Extract firmware
+	 * @param dir Directory to extract files to
 	 * @throws IOException 
 	 */
-	private void savePackets() throws FileNotFoundException, IOException {
+	private void extract(File dir) throws FileNotFoundException, IOException {
+		System.out.println("Creating directories...");
+		
+		for (String name : directoryNames.values()) {
+			File d = new File(dir, name);
+			
+			if(!d.exists())
+				d.mkdirs();
+		}
+		
+		// for each file found
+		for (Short fileId : fileNames.keySet()) {
+			String fileName = fileNames.get(fileId);
+			
+		}	
+		
 		System.out.println("Saving files from packets...");
 		
 		for (Short fileId : fileNames.keySet()) {
@@ -476,6 +399,15 @@ public class AmiFirm {
 						out.write(buffer.array(), Packet.HEADER_SIZE, buffer.limit()-Packet.HEADER_SIZE);
 					}
 				}
+			} if (fileBuffer.containsKey(fileId)) {
+				System.out.println("Extracting " + fileName);
+				ByteBuffer buffer = fileBuffer.get(fileId);
+				buffer.rewind();
+				
+				// open the output (append is false), write and close
+				try (FileOutputStream out = new FileOutputStream(new File(dir, fileName))) {
+					out.write(buffer.array(), 0, buffer.remaining());
+				}
 			} else {
 				if (filePackets.containsKey(fileId))
 					System.err.println(fileName + " not found");
@@ -485,106 +417,126 @@ public class AmiFirm {
 		}
 	}
 	
-	private static void usage() {
-		System.out.println("Usage:");
-		System.out.println("  java -jar amifirm.jar -m <multicast address> <multicast port> <path to extract> [firmware backup path]");
-		System.out.println("  java -jar amifirm.jar -f <path to MCastFSv2 firmware> <path to extract to>");
-		System.exit(-1);
-	}
-	
 	public static void main(String args[]) {
-		System.out.println("AmiFirm 0.2.0 Copyright (c) 2013-2014 Iwan Timmer, mielleman");
+		System.out.println("AmiFirm 0.2.0");
+		System.out.println("Copyright (c) 2013-2014 Iwan Timmer");
+		System.out.println("Copyright (c) 2014 mielleman");
 		System.out.println("Distributed under the GNU GPL v3. For full terms see the LICENSE file.\n");
 
-		String mode = "";
-		File dir;
-		File file;
-		AmiFirm firm;
+		int port = 0;
+		InetAddress address = null;
+		File file = null;
+		File dir = null;
+		File save = null;
+		boolean usage = false;
 		
-		// read the modus
-		try {
-			mode = args[0].toString();
-		} catch (Exception e) {
-			usage();					
-		}	
-		
-		switch(mode) {
-			case "-m":
-				// Multicast mode
-				// some special cases need to be caught
-				try {
-					if (args.length != 4 && args.length != 5)
-						// somehow someone didn't understand how to run this program
-						usage();
-	
-					InetAddress source = InetAddress.getByName(args[1]);
-					if (!source.isMulticastAddress()) {
-						System.err.println("Address is not a multicast address");
-						System.exit(-1);
+		for (int i = 0; i < args.length; i++) {
+			switch (args[i]) {
+				case "-m":
+					i++;
+					if (i == args.length) {
+						System.err.println("Multicast address is missing");
+						usage = true;
 					}
 					
-					int port = Integer.parseInt(args[2]);
+					String multicast[] = args[i].split(":");
+					if (multicast.length != 2) {
+						System.err.println("Address is not a multicast address");
+						usage = true;
+					}
+					
+					try {
+						address = InetAddress.getByName(multicast[0]);
+					} catch (UnknownHostException e) {
+						address = null;
+					}
+					
+					if (address != null && !address.isMulticastAddress()) {
+						System.err.println("Address is not a multicast address");
+						usage = true;
+					}
+					
+					try {
+						port = Integer.parseInt(multicast[1]);
+					} catch (NumberFormatException e) {
+						port = -1;
+					}
+					
 					if (port<0||port>65535) {
 						System.err.println("Port is not a valid portnumber");
-						System.exit(-1);
+						usage = true;
 					}
-					
-					dir = new File(args[3]);
+					break;
+				case "-s":
+					i++;
+					if (i == args.length) {
+						System.err.println("File name is missing");
+						usage = true;
+					}
+					save = new File(args[i]);
+					break;
+				case "-f":
+					i++;
+					if (i == args.length) {
+						System.err.println("File name is missing");
+						usage = true;
+					}
+					file = new File(args[i]);
+					if (!file.exists()) {
+						System.err.println("File doesn't exist");
+						usage = true;
+					}
+					break;
+				case "-d":
+					i++;
+					if (i == args.length) {
+						System.err.println("Directory name is missing");
+						usage = true;
+					}
+					dir = new File(args[i]);
 					dir.mkdir();
 					if (!dir.isDirectory()) {
 						System.err.println("Directory is not valid");
-						System.exit(-1);
+						usage = true;
 					}
-					
-					File export = null;
-					if (args.length==5)
-						export = new File(args[4]);
-				
-					// let's go!
-					// create the work object
-					firm = new AmiFirm(source, port, dir, export);					
-					firm.run();
-					
-				} catch (NumberFormatException e) {
-					System.err.println("Port is not a valid portnumber");
-					System.exit(-1);
-				} catch (UnknownHostException e) {
-					System.err.println("Address is not a multicast address");
-					System.exit(-1);
-				} catch (SocketTimeoutException e) {
-					System.err.println("Couldn't receive firmware data");
-				} catch (IOException e) {
-					System.err.println(e.getMessage());
-				}
-				break;
+					break;
+			}
+		}
+		
+		if (file != null && dir == null) {
+			System.err.println("Need directory to extract to");
+			usage = true;
+		}
+		
+		if (address != null) {
+			if (file != null) {
+				System.err.println("You need to specify either a firmware file or a multicast address");
+				usage = true;
+			}
+		}
+		
+		if (usage) {
+			System.out.println("Usage:");
+			System.out.println("  java -jar amifirm.jar -m <multicastaddress:port> -d <path to extract> -s [firmware backup path]");
+			System.out.println("  java -jar amifirm.jar -f <path to MCastFSv2 firmware> -d <path to extract to>");
+			System.exit(-1);
+		}
 
-			// File mode
-			case "-f":
-				if (args.length != 3) 
-					// somehow someone didn't understand how to run this program
-					usage();
-				
-				try {
-					// read the arguments
-					file = new File(args[1]);
-					dir = new File(args[2]);					
-					
-					// let's do this
-					firm = new AmiFirm(dir, file);
-					firm.read();
-					
-				} catch (SocketTimeoutException e) {
-					System.err.println("Couldn't receive firmware data");
-				} catch (IOException e) {
-					System.err.println(e.getMessage());
-				} catch (Exception e) {
-					usage();					
-				}
-				break;
-				
-			default:
-				usage();
-		}			
+		try {
+			AmiFirm firm = new AmiFirm();
+			
+			if (address != null)
+				firm.download(address, port, save);
+			if (file != null)
+				firm.parseFile(file);
+			
+			if (dir != null)
+				firm.extract(dir);
+		} catch (SocketTimeoutException e) {
+			System.err.println("Couldn't receive firmware data");
+		} catch (IOException e) {
+			System.err.println(e.getMessage());
+		}
 	}
 	
 }
