@@ -13,10 +13,10 @@ Start the application using:
 ```
 java -jar amifirm.jar [options]
 	-m [multicast address:port]	address to download firmware from
-	-f [file]					name of local MCastFSv2 file
+	-f [file]					name of local MCastFSv2 file to extract from
 	-d [path]					path to extract firmware files to
 	-s [filename]				file to cache firmware packets (multicast only)
-	-e [filename]				files to extract from firmware
+	-e [filename]				files to extract from firmware (can be specified multiple times)
 	-i							decompress compressed files
 ```
 

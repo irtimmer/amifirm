@@ -452,7 +452,7 @@ public class AmiFirm {
 			System.out.println("\t-f [file]\t\t\tname of local MCastFSv2 file");
 			System.out.println("\t-d [path]\t\t\tpath to extract firmware files to");
 			System.out.println("\t-s [filename]\t\t\tfile to cache firmware packets (multicast only)");
-			System.out.println("\t-e [filename]\t\t\tfiles to extract from firmware");
+			System.out.println("\t-e [filename]\t\t\tfiles to extract from firmware (can be specified multiple times)");
 			System.out.println("\t-i \t\t\t\tdecompress compressed files");
 			System.exit(-1);
 		}
